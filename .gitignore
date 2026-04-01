@@ -1,0 +1,24 @@
+# Binaries
+realestate-leads
+realestate-leads-*
+*.exe
+
+# Cache database
+franchise_tax_cache.db
+
+# Output files
+output_*.csv
+
+# Go files
+go.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

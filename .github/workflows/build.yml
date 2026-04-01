@@ -1,0 +1,85 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+
+      - name: Get commit info
+        id: commit
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "date=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      - name: Build for Linux (amd64)
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o realestate-leads-linux-amd64 main.go
+
+      - name: Build for Linux (arm64)
+        run: |
+          GOOS=linux GOARCH=arm64 go build -o realestate-leads-linux-arm64 main.go
+
+      - name: Build for macOS (amd64)
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -o realestate-leads-macos-amd64 main.go
+
+      - name: Build for macOS (arm64)
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -o realestate-leads-macos-arm64 main.go
+
+      - name: Build for Windows (amd64)
+        run: |
+          GOOS=windows GOARCH=amd64 go build -o realestate-leads-windows-amd64.exe main.go
+
+      - name: Generate checksums
+        run: |
+          sha256sum realestate-leads-* > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: build-${{ steps.commit.outputs.date }}-${{ steps.commit.outputs.sha_short }}
+          name: Build ${{ steps.commit.outputs.date }}-${{ steps.commit.outputs.sha_short }}
+          body: |
+            Automated build from commit ${{ github.sha }}
+
+            ## Download Instructions
+
+            1. Download the binary for your platform
+            2. Set the `TX_COMPTROLLER_API_KEY` environment variable
+            3. Make it executable (Linux/macOS): `chmod +x realestate-leads-*`
+            4. Run: `./realestate-leads-<platform> --file input.csv`
+
+            ## Checksums
+            ```
+            $(cat checksums.txt)
+            ```
+          files: |
+            realestate-leads-linux-amd64
+            realestate-leads-linux-arm64
+            realestate-leads-macos-amd64
+            realestate-leads-macos-arm64
+            realestate-leads-windows-amd64.exe
+            checksums.txt
+          draft: false
+          prerelease: false
