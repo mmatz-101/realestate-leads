@@ -58,7 +58,7 @@ Reorganized from single-file (`main.go`) to modular architecture:
 
 ## Dependencies Added
 
-- `github.com/mattn/go-sqlite3` v1.14.38 - SQLite driver
+- `modernc.org/sqlite` v1.14.38 - SQLite driver
 
 ## How It Solves Your Problem
 

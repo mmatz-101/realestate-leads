@@ -16,7 +16,7 @@ This is a Go CLI application that enriches real estate lead data by querying the
 - `utils.go` - Utility functions
 
 **External dependencies**:
-- `github.com/mattn/go-sqlite3` - SQLite database driver
+- `modernc.org/sqlite` - SQLite database driver
 
 **Core workflow**:
 1. Initialize SQLite cache (`franchise_tax_cache.db`)

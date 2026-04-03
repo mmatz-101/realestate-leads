@@ -5,21 +5,21 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // CacheEntry represents a cached franchise tax lookup
 type CacheEntry struct {
-	BusinessName             string
-	TaxpayerID               string
-	OfficialName             string
-	RegisteredAgentName      string
-	MailingAddressStreet     string
-	MailingAddressCity       string
-	MailingAddressState      string
-	MailingAddressZip        string
-	CachedAt                 time.Time
-	NotFound                 bool
+	BusinessName         string
+	TaxpayerID           string
+	OfficialName         string
+	RegisteredAgentName  string
+	MailingAddressStreet string
+	MailingAddressCity   string
+	MailingAddressState  string
+	MailingAddressZip    string
+	CachedAt             time.Time
+	NotFound             bool
 }
 
 // Cache manages the SQLite database for caching franchise tax lookups
@@ -29,7 +29,7 @@ type Cache struct {
 
 // NewCache creates a new cache instance and initializes the database
 func NewCache(dbPath string) (*Cache, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening cache database: %w", err)
 	}
