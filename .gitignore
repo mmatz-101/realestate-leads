@@ -9,9 +9,6 @@ franchise_tax_cache.db
 # Output files
 output_*.csv
 
-# Go files
-go.sum
-
 # IDE
 .vscode/
 .idea/
