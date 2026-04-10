@@ -1,13 +1,31 @@
-# Binaries
+# Binaries for distribution
+dist/
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build artifacts
 realestate-leads
 realestate-leads-*
-*.exe
 
-# Cache database
+# Auth & Session data
+auth-session.json
+browser-data/
+
+# Data directories
+data/uploads/*.csv
+data/output/*.csv
 franchise_tax_cache.db
 
-# Output files
-output_*.csv
+# Lock files
+.~lock.*#
+*.lock
+
+# Logs
+*.log
+logs/
 
 # IDE
 .vscode/
@@ -15,7 +33,25 @@ output_*.csv
 *.swp
 *.swo
 *~
+.project
+.classpath
+.settings/
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Test coverage
+*.out
+coverage.txt
+coverage.html
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Environment
+.env
+.env.local

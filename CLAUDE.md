@@ -1,93 +1,81 @@
-# CLAUDE.md
+# realestate-leads
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Overview
-
-This is a Go CLI application that enriches real estate lead data by querying the Texas Comptroller's public franchise tax API. The application reads business names from a CSV file, looks up their franchise tax records, and outputs enriched data including registered agent names and mailing addresses.
+Real estate lead generation tool that enriches LLC buyer data from Matrix MLS CSV exports using the Texas Comptroller API and Forewarn.
 
 ## Architecture
 
-**Modular application** with clean separation of concerns:
-- `main.go` - CLI and orchestration
-- `api.go` - Texas Comptroller API client
-- `cache.go` - SQLite caching layer
-- `retry.go` - Retry logic and adaptive rate limiting
-- `utils.go` - Utility functions
+Go binary that runs a local HTTP server (localhost:8080) with a web UI. Uses `go-rod` to open a headed Chromium browser for Forewarn login, then makes direct API calls to `api.forewarn.com/api/search` using the extracted bearer token.
 
-**External dependencies**:
-- `modernc.org/sqlite` - SQLite database driver
+### Key Components
 
-**Core workflow**:
-1. Initialize SQLite cache (`franchise_tax_cache.db`)
-2. Read input CSV with a "Business Name" column
-3. For each business name:
-   - Check cache first (instant lookup if cached)
-   - If not cached: Search franchise tax records via `/public-data/v1/public/franchise-tax-list`
-   - Get detailed information via `/public-data/v1/public/franchise-tax/{taxpayerID}`
-   - Store result in cache (both successful and failed lookups)
-4. Extract registered agent name, split into first/last, format mailing address
-5. Write to timestamped output CSV with enriched data
+- **`cmd/main.go`** — Entry point. Starts session manager, HTTP server, opens browser for login.
+- **`internal/browser/session.go`** — Manages Chromium browser via rod. Handles login flow, saves/restores `persist:root` from Forewarn's localStorage, extracts bearer token (`sessionId`) for API auth. Keep-alive loop refreshes session every 30 min.
+- **`internal/browser/searcher.go`** — Pure HTTP client. POSTs to `https://api.forewarn.com/api/search` with `{"firstName","lastName","zip"}`. Parses JSON response for phone numbers, property count, deceased status. No browser automation needed for searches.
+- **`internal/server/server.go`** — HTTP server serving the web UI and API endpoints (upload CSV, start job, SSE progress, download results).
+- **`internal/jobs/runner.go`** — Job queue. Parses CSV, orchestrates searches, tracks progress, writes result CSV. Broadcasts progress via SSE to the web UI.
+- **`internal/comptroller/`** — Texas Comptroller API client (existing, for LLC officer lookup).
+- **`internal/csv/`** — CSV reader/writer with LLC detection (existing).
+- **`web/index.html`** — Single-page UI for login confirmation, CSV upload, progress monitoring, result download.
 
-**Key components**:
-- `Cache.Get()/Put()` - SQLite cache for storing lookups (cache.go)
-- `APIClient.SearchFranchiseTax()` - Searches by business name, returns taxpayer ID (api.go)
-- `APIClient.GetFranchiseTaxDetail()` - Fetches full record including agent and address (api.go)
-- `WithRetry()` - Retry logic with exponential backoff for 429 errors (retry.go)
-- `AdaptiveDelay` - Dynamic rate limiting (100ms → 200ms after 429s) (retry.go)
-- `splitName()` - Parses registered agent name into first/last (utils.go)
-- `formatAddress()` - Combines address components into single string (utils.go)
-- Rate limiting: 100ms base delay, 200ms in adaptive mode (see `requestDelay` constant)
+### Auth Flow
 
-**API integration**:
-- Base URL: `https://api.comptroller.texas.gov`
-- Requires `TX_COMPTROLLER_API_KEY` environment variable
-- Uses `x-api-key` header for authentication
-- 30-second HTTP timeout
+1. Rod opens a visible Chromium browser to `app.forewarn.com/login`
+2. User logs in manually (handles MFA/CAPTCHA)
+3. User clicks "I've logged in" in the web UI at localhost:8080
+4. `saveAuth()` finds the Forewarn tab, grabs `persist:root` from localStorage, saves to `./auth-session.json`
+5. `GetToken()` parses `persist:root` → `authentication` (JSON string) → `session.sessionId` → UUID used as `Authorization: bearer <token>`
+6. On restart, `restoreAuth()` injects saved `persist:root` back into localStorage so the browser session persists
 
-**Data structures**:
-- `searchResponse` - API search results with taxpayer IDs
-- `detailResponse` - Full franchise tax record with address/agent info
+### Search Flow
 
-## Development Commands
+For each CSV row with a First Name + Last Name:
+1. Extract zip from `Business Address` field
+2. POST to Forewarn API with name + zip
+3. Check `isDead` — skip if deceased
+4. Check `property` array length — skip if < 5
+5. Extract first Mobile and first Residential phone number
+6. Write results to output CSV
 
-**Build and run**:
+### CSV Format
+
+Input columns: `Original Business Name`, `First Name`, `Last Name`, `Business Address`, `Business Name`
+
+Output adds: `status`, `skip_reason`, `full_name`, `age`, `current_address`, `mobile_phone`, `mobile_last_seen`, `residential_phone`, `residential_last_seen`, `property_count`, `error`
+
+## Build & Run
+
 ```bash
-go build -o realestate-leads
-./realestate-leads --file input.csv
+go mod tidy
+go run cmd/main.go
+# or
+go build -o leads cmd/main.go
+./leads
 ```
 
-**Run directly**:
-```bash
-go run main.go --file input.csv
+The login URL and search URL are hardcoded in `cmd/main.go`.
+
+## Project Conventions
+
+- Module path: `github.com/mmatz-101/realestate-leads`
+- Go 1.26+
+- All internal packages under `internal/` (not importable externally)
+- Browser automation via `github.com/go-rod/rod`
+- Web UI is a single HTML file served from `web/`
+- Auth persisted in `./auth-session.json` (gitignored)
+- Browser profile in `./browser-data/` (gitignored)
+
+## Files to gitignore
+
+```
+auth-session.json
+browser-data/
+*.csv
 ```
 
-**Format code**:
-```bash
-go fmt main.go
-```
+## Current Status / TODOs
 
-**Required environment**:
-```bash
-export TX_COMPTROLLER_API_KEY="your-api-key"
-```
-
-**Input CSV requirements**:
-- Must have a "Business Name" column (case-insensitive matching)
-- Other columns are ignored
-
-**Output CSV format**:
-- Original Business Name
-- First Name (from registered agent)
-- Last Name (from registered agent)
-- Business Address (formatted mailing address)
-- Business Name (official name from franchise tax record)
-- Filename: `output_YYYYMMDD_HHMMSS.csv`
-
-## Important Notes
-
-- The application includes rate limiting (200ms between requests) to respect API usage
-- Warnings are written to stderr, progress to stdout
-- Failed lookups result in blank rows in output (preserves original business name)
-- Column matching is case-insensitive with whitespace trimming
-- Go version: 1.26.1 (see go.mod)
+- [ ] Verify `saveAuth` correctly captures `persist:root` via rod's `Eval` (had issues with `gson.JSON` value extraction — `fmt.Sprintf("%v", result.Value)` is the current workaround)
+- [ ] Test full end-to-end: login → save auth → restart → restore → upload CSV → API searches → output CSV
+- [ ] Add rate limiting / backoff for Forewarn API calls
+- [ ] Handle token expiry mid-job (detect 401, prompt re-login)
+- [ ] Consider Tauri wrapper for distribution later

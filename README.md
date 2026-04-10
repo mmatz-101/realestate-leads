@@ -1,361 +1,375 @@
-# Real Estate Lead Enrichment Tool
+# realestate-leads
 
-A Go CLI application that enriches real estate lead data by querying the Texas Comptroller's public franchise tax API. The tool reads business names from a CSV file, looks up their franchise tax records, and outputs enriched data including registered agent names and mailing addresses.
+Real estate lead generation tool that enriches LLC buyer data from Matrix MLS CSV exports using the Texas Comptroller API and Forewarn.
 
 ## Features
 
-- **SQLite Cache** - Stores previous lookups to avoid redundant API calls
-- **Smart Retry Logic** - Automatically retries failed requests with exponential backoff (5s → 15s → 45s)
-- **Adaptive Rate Limiting** - Adjusts delay after rate limit errors (100ms → 200ms)
-- **Resume Capability** - Restart failed runs without losing progress
-- Automatic franchise tax record lookup for Texas businesses
-- Extracts registered agent names and mailing addresses
-- Splits agent names into first/last name components
-- Handles business name variations (strips LLC, Inc, Corp suffixes for retry)
-- Timestamped output files for tracking
-- Comprehensive error handling and progress reporting
+✅ **Browser-Automated Forewarn Integration**
+- Opens headed Chromium browser for secure login (handles MFA/CAPTCHA)
+- Persistent session management with auto-restore
+- Smart token refresh (extends session automatically)
+- Direct API calls for fast searches
+
+✅ **Intelligent Lead Filtering**
+- Automatically filters out deceased leads
+- Requires minimum property count (configurable, default 5+)
+- Extracts mobile and residential phone numbers
+- Records last property purchase date
+
+✅ **Production-Ready Features**
+- Real-time progress tracking via web UI
+- Server-Sent Events (SSE) for live updates
+- Job cancellation mid-processing
+- Partial CSV export on cancellation
+- Auto-detection of existing login sessions
+
+✅ **Clean Web Interface**
+- Localhost web UI (auto-opens on startup)
+- Drag-and-drop CSV upload
+- Live progress monitoring with scrollable logs
+- One-click result download
+
+## Architecture
+
+Go binary that runs a local HTTP server (localhost:8080) with a web UI. Uses `go-rod` to open a headed Chromium browser for Forewarn login, then makes direct API calls to `api.forewarn.com/api/search` using the extracted bearer token.
+
+**Key Components:**
+- `cmd/main.go` — Entry point
+- `internal/browser/session.go` — Session management & token refresh
+- `internal/browser/searcher.go` — Forewarn API client
+- `internal/server/server.go` — HTTP server & API endpoints
+- `internal/jobs/runner.go` — Job queue & CSV processing
+- `web/index.html` — Single-page UI
 
 ## Prerequisites
 
-- **Go 1.26.1** or higher
-- **Texas Comptroller API Key** - Required for API access
+- **Go 1.26+**
+- **Chrome/Chromium** (installed automatically by go-rod)
+- **Forewarn Account** (for property data searches)
 
 ## Installation
 
-### Build from Source
+### From Source
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/mmatz-101/realestate-leads.git
 cd realestate-leads
-go build -o realestate-leads
+make install  # Install dependencies
+make build    # Build binary
+```
+
+### Pre-built Binaries
+
+Download from the [releases page](https://github.com/mmatz-101/realestate-leads/releases):
+- Linux (amd64, arm64)
+- macOS (Intel, Apple Silicon)
+- Windows (amd64)
+
+## Quick Start
+
+1. **Set up environment:**
+   ```bash
+   export TX_COMPTROLLER_API_KEY="your-api-key-here"  # Optional: for preview/full modes
+   ```
+
+2. **Start the application:**
+   ```bash
+   ./build/realestate-leads
+   # or
+   make run
+   ```
+
+3. **Browser opens automatically:**
+   - Tab 1: Forewarn login page
+   - Tab 2: localhost:8080 (control panel)
+
+4. **Log in to Forewarn** (in the browser)
+
+5. **Upload CSV** in the web UI at localhost:8080
+
+6. **Select processing mode:**
+   - **Forewarn Only** (default): Skip comptroller, enrich with Forewarn using existing First Name + Last Name
+   - **Preview Mode**: Look up LLC officers from Texas Comptroller only (test data quality)
+   - **Full Pipeline**: Stage 1 (Comptroller) → Stage 2 (Forewarn enrichment)
+
+7. **Monitor progress** with real-time updates
+
+8. **Download results** when complete
+
+9. **Continue to Stage 2** (optional): If you ran preview mode, click "Continue to Stage 2" to enrich with Forewarn
+
+## Project Structure
+
+```
+realestate-leads/
+├── cmd/
+│   └── main.go              # Entry point
+├── internal/
+│   ├── browser/
+│   │   ├── session.go       # Session & auth management
+│   │   └── searcher.go      # Forewarn API client
+│   ├── comptroller/
+│   │   ├── client.go        # Texas Comptroller API client
+│   │   └── searcher.go      # Comptroller search orchestration
+│   ├── jobs/
+│   │   └── runner.go        # Multi-stage job queue & CSV processing
+│   ├── server/
+│   │   └── server.go        # HTTP server & API endpoints
+├── web/
+│   └── index.html           # Web UI
+├── data/
+│   ├── uploads/             # Uploaded CSVs (temp)
+│   └── output/              # Result CSVs
+├── build/                   # Local builds
+├── dist/                    # Distribution builds
+├── CLAUDE.md                # Development docs
+├── PRODUCT_ROADMAP.md       # Future improvements
+├── Makefile                 # Build automation
+└── README.md                # This file
+```
+
+## Build Commands
+
+```bash
+# Build for current platform
+make build
+
+# Build for all platforms
+make build-all
+
+# Run the application
+make run
+
+# Clean build artifacts
+make clean
+
+# Clean data files
+make clean-data
+
+# Run tests
+make test
+
+# Show all available commands
+make help
 ```
 
 ## Configuration
 
-### Required Environment Variable
+### CLI Flags
 
 ```bash
-export TX_COMPTROLLER_API_KEY="your-api-key-here"
+./build/realestate-leads [options]
+
+Options:
+  --port int        Port for web UI (default: 8080)
+  --refresh int     Session refresh interval in minutes (default: 30)
+  --delay int       Delay between searches in milliseconds (default: 2000)
 ```
 
-To obtain an API key, visit the [Texas Comptroller Public Data Portal](https://comptroller.texas.gov).
-
-## Usage
-
-### Basic Command
+### Example
 
 ```bash
-./realestate-leads --file input.csv
+# Run on port 3000 with 1 second between searches
+./build/realestate-leads --port 3000 --delay 1000
 ```
 
-### Running Without Building
+## Processing Modes
 
-```bash
-go run main.go --file input.csv
-```
+The application supports three processing modes:
 
-## Input File Format
+### 1. Forewarn Only (Default)
+**Use case:** You already have First Name, Last Name, and Business Address data.
 
-The input CSV file **must** contain a column named **"Business Name"** (case-insensitive).
+**Input requirements:**
+- CSV must contain: `First Name`, `Last Name`, `Business Address`
 
-### Required Column
+**What it does:**
+- Skips Texas Comptroller lookup
+- Goes directly to Forewarn API for property/phone enrichment
+- Filters out deceased leads and those with < 5 properties
 
-| Column Name   | Description                           | Required |
-|---------------|---------------------------------------|----------|
-| Business Name | The name of the business to look up   | **Yes**  |
+**Output:** Original columns + Forewarn enrichment data
 
-### Example Input CSV
+### 2. Preview Mode (Comptroller Only)
+**Use case:** Test data quality, verify LLC officer extraction before paying for Forewarn searches.
 
-```csv
-Location,Address,Business Name,First,Last,Number,Notes
-Fort Worth,,Sme Homes Llc,Sergio,Vargas,469-235-7395,text
-Fort Worth,,Dfw Home Solutions Llc,Joanne,Thorburn,817-225-5647,Auto voicemail
-Fate/Royse,3005 Box Elder Ave,GFO Home LLC,Glenn,Gehan,214-908-1350,
-```
+**Input requirements:**
+- CSV must contain: `Business Name` (LLC names)
 
-### Important: What Data is Used?
+**What it does:**
+- Stage 1: Looks up LLC officers from Texas Comptroller API
+- Extracts `First Name`, `Last Name`, `Business Address` for each LLC
+- **Stops here** — download results to verify quality
 
-**Only the "Business Name" column is extracted from your input file.** All other columns (Location, Address, First, Last, Number, Notes, etc.) are completely ignored and **do NOT appear in the output**.
+**Output:** Original columns + `First Name`, `Last Name`, `Business Address`, `Business Name`
 
-The output file is built entirely from:
-- The original "Business Name" value from your input (preserved for reference)
-- Data retrieved from the Texas Comptroller's franchise tax API
+**Next step:** Click "Continue to Stage 2" to enrich with Forewarn
 
-## Output File Format
+### 3. Full Pipeline (Comptroller → Forewarn)
+**Use case:** End-to-end processing from LLC names to fully enriched leads.
 
-The application generates a timestamped CSV file with the following format:
+**Input requirements:**
+- CSV must contain: `Business Name` (LLC names)
 
-**Filename**: `output_YYYYMMDD_HHMMSS.csv`
+**What it does:**
+- Stage 1: Texas Comptroller API lookup (extracts officers)
+- Stage 2: Forewarn API enrichment (property/phone data)
+- Fully automated, no manual intervention
 
-### Output Columns
+**Output:** Original columns + Comptroller data + Forewarn enrichment data
 
-The output CSV contains **only these 5 columns** - no input columns are passed through:
+## Input CSV Format
 
-| Column Name            | Source                                                       | Description                                                  |
-|------------------------|--------------------------------------------------------------|--------------------------------------------------------------|
-| Original Business Name | Input CSV "Business Name" column                             | The business name from your input file (preserved for reference) |
-| First Name             | API - `registeredAgentName` (parsed)                         | First name extracted from the registered agent               |
-| Last Name              | API - `registeredAgentName` (parsed)                         | Last name extracted from the registered agent                |
-| Business Address       | API - `mailingAddress*` fields (formatted)                   | Formatted mailing address from franchise tax records         |
-| Business Name          | API - `name` field                                           | Official business name from franchise tax records            |
+**For Forewarn Only mode:**
+- `First Name` (required)
+- `Last Name` (required)
+- `Business Address` (required, for zip code extraction)
 
-**Note**: Input columns like Location, Address, First, Last, Number, Notes, etc. are **not** included in the output.
+**For Preview/Full modes:**
+- `Business Name` (required, LLC names like "SME Homes LLC")
 
-### Example Output CSV
+Optional columns are preserved in the output.
 
-```csv
-Original Business Name,First Name,Last Name,Business Address,Business Name
-Sme Homes Llc,John,Doe,"123 Main St, Dallas, TX 75201",SME HOMES LLC
-Dfw Home Solutions Llc,Jane,Smith,"456 Oak Ave, Fort Worth, TX 76102",DFW HOME SOLUTIONS LLC
-GFO Home LLC,Glenn,Gehan,"789 Elm Dr, Austin, TX 78701",GFO HOME LLC
-```
+## Output CSV Format
 
-### Failed Lookups
+Original columns + enrichment data:
 
-If a business cannot be found in the franchise tax database, a row with blank fields will be written:
-
-```csv
-Original Business Name,First Name,Last Name,Business Address,Business Name
-Unknown Business Inc,,,,,
-```
+| Column | Description |
+|--------|-------------|
+| `status` | found, skipped, or error |
+| `skip_reason` | Why skipped (deceased, low property count, etc.) |
+| `full_name` | Full name from Forewarn |
+| `age` | Current age |
+| `current_address` | Current residential address |
+| `mobile_phone` | Mobile phone number |
+| `mobile_last_seen` | Last seen date for mobile |
+| `residential_phone` | Residential phone number |
+| `residential_last_seen` | Last seen date for residential |
+| `property_count` | Number of properties owned |
+| `last_purchase_date` | Most recent property purchase date |
+| `error` | Error message if search failed |
 
 ## How It Works
 
-1. **Cache Initialization**: Opens/creates SQLite database (`franchise_tax_cache.db`) to store lookups
-2. **Input Validation**: Reads the CSV file and verifies the "Business Name" column exists
-3. **Cache Lookup**: For each business name:
-   - Checks if data exists in cache (instant lookup)
-   - If cached, uses stored data and skips API call
-4. **API Lookup** (if not cached):
-   - Queries the Texas Comptroller's franchise tax API with retry logic
-   - If 429 (rate limit) error occurs:
-     - Retries with exponential backoff (5s, 15s, 45s)
-     - Switches to adaptive mode (increases delay to 200ms for 50 requests)
-   - If no results found, retries with business suffixes stripped (LLC, Inc, Corp, etc.)
-5. **Detail Retrieval**: Fetches complete franchise tax record including:
-   - Registered agent name
-   - Mailing address (street, city, state, ZIP)
-6. **Cache Storage**: Saves successful (and failed) lookups to cache for future runs
-7. **Data Transformation**:
-   - Splits registered agent name into first/last components
-   - Formats address components into a single address string
-8. **Output Generation**: Writes enriched data to timestamped CSV file
+### Authentication Flow
 
-## Rate Limiting & Retry Logic
+1. Rod opens visible Chromium browser to `app.forewarn.com/login`
+2. User logs in manually (handles MFA/CAPTCHA)
+3. User clicks "I've logged in" in web UI at localhost:8080
+4. App extracts `persist:root` from localStorage → saves to `auth-session.json`
+5. Token extracted from `persist:root` → used as `Authorization: bearer <token>`
+6. On restart, `persist:root` restored → session persists (no re-login needed)
 
-The application includes intelligent rate limiting and retry mechanisms:
+### Multi-Stage Processing Flow
 
-### Base Rate Limiting
-- **100ms delay** between API requests under normal conditions
-- **200ms delay** in adaptive mode (triggered after 429 errors)
-- Adaptive mode lasts for 50 requests before returning to normal
+**Preview Mode (Comptroller Only):**
+1. Read `Business Name` column from CSV
+2. POST to Texas Comptroller API: `/public-data/v1/public/franchise-tax-list?name={LLC name}`
+3. Extract `taxpayerID` from response
+4. GET details from `/public-data/v1/public/franchise-tax/{taxpayerID}`
+5. Parse `registeredAgentName` → split into `First Name` and `Last Name`
+6. Extract `mailingAddress*` → format as `Business Address`
+7. Write results to output CSV (Stage 1 complete)
+8. **Stop** — user can review and optionally continue to Stage 2
 
-### Exponential Backoff for 429 Errors
-When the API returns HTTP 429 (Too Many Requests):
-1. **1st retry**: Wait 5 seconds
-2. **2nd retry**: Wait 15 seconds
-3. **3rd retry**: Wait 45 seconds
-4. **After 3 retries**: Mark as failed and continue
+**Full Pipeline (Comptroller → Forewarn):**
+1. Run Stage 1 (Comptroller lookup) as above
+2. Use Stage 1 output (with First Name, Last Name, Business Address) as input for Stage 2
+3. Run Stage 2 (Forewarn enrichment) as below
+4. Write final results with both Comptroller and Forewarn data
 
-This ensures the application respects API rate limits while maximizing throughput.
+**Forewarn Only Mode:**
+1. Read `First Name`, `Last Name`, `Business Address` from CSV
+2. Extract zip from Business Address
+3. POST to `https://api.forewarn.com/api/search` with name + zip
+4. Check `isDead` → skip if deceased
+5. Check property count → skip if < 5 (default)
+6. Extract mobile and residential phone numbers
+7. Record most recent property purchase date
+8. Write results to output CSV
 
-## Error Handling
+### Token Refresh Strategy
 
-- **Missing "Business Name" column**: Application exits with error
-- **Empty business names**: Row is skipped with warning
-- **API lookup failures**: Warning is logged, blank row is written to output
-- **Network errors**: Detailed error messages are written to stderr
-
-### Warning Messages
-
-All warnings are written to **stderr** while progress is written to **stdout**. Example:
-
-```
-warning: row 5 ("Unknown Business"): no search results found
-```
-
-## SQLite Cache
-
-The application uses a local SQLite database (`franchise_tax_cache.db`) to cache all API lookups:
-
-### What Gets Cached?
-- **Successful lookups**: Full franchise tax records with agent and address data
-- **Failed lookups**: "Not found" results to avoid repeated API calls for non-existent businesses
-- **Timestamp**: Each entry includes when it was cached
-
-### Cache Benefits
-- **Speed**: Instant lookups for previously processed businesses
-- **Reliability**: Resume interrupted runs without losing progress
-- **API Efficiency**: Avoid redundant API calls for duplicate business names
-- **Cost Savings**: Reduce API usage if rate limits or quotas apply
-
-### Cache Management
-
-**View cache stats**:
-The application displays cache statistics at startup and completion:
-```
-cache: 439 entries (23 not-found)
-```
-
-**Clear cache** (if needed):
-```bash
-rm franchise_tax_cache.db
-```
-
-**Cache location**: Same directory as the executable (`franchise_tax_cache.db`)
-
-## Business Name Suffix Handling
-
-If the initial search returns no results, the application automatically retries with common business suffixes removed:
-
-- LLC, L.L.C., L.L.C
-- Inc., Inc, Incorporated
-- Corp., Corp, Corporation
-- Co., Co, Company
-- Ltd., Ltd, Limited
-- L.P., LP
-
-**Example**: "Acme Solutions LLC" → retry as "Acme Solutions"
+- Every 30 minutes, checks if token expires within 10 minutes
+- If yes: calls `/api/authentication/refresh` to extend session
+- If no: skips refresh (already fresh from recent searches)
+- Forewarn searches automatically refresh token, so active jobs stay fresh
 
 ## Development
 
-### Code Formatting
+### Running from Source
 
 ```bash
-go fmt main.go
+go run cmd/main.go
 ```
 
-### Project Structure
+### Project Conventions
 
-```
-realestate-leads/
-├── main.go                     # Main application logic and CLI
-├── api.go                      # API client and Texas Comptroller integration
-├── cache.go                    # SQLite cache implementation
-├── retry.go                    # Retry logic and adaptive delay
-├── utils.go                    # Utility functions (formatting, parsing)
-├── go.mod                      # Go module definition
-├── franchise_tax_cache.db      # SQLite cache database (auto-created)
-├── CLAUDE.md                   # Development documentation
-└── README.md                   # This file
-```
+- Module path: `github.com/mmatz-101/realestate-leads`
+- Go 1.26+
+- All internal packages under `internal/` (not importable externally)
+- Browser automation via `github.com/go-rod/rod`
+- Web UI is a single HTML file served from `web/`
+- Auth persisted in `./auth-session.json` (gitignored)
+- Browser profile in `./browser-data/` (gitignored)
 
-### Architecture Overview
+### Adding Features
 
-The application is modular with clean separation of concerns:
-
-**main.go** - CLI and orchestration
-- Command-line argument parsing
-- CSV reading/writing
-- Main processing loop
-
-**api.go** - API client (`api.go:33-119`)
-- `APIClient.SearchFranchiseTax()` - Searches franchise tax records by business name
-- `APIClient.GetFranchiseTaxDetail()` - Retrieves detailed tax record by taxpayer ID
-- `stripBusinessSuffix()` - Removes common business suffixes for retry logic
-- `RateLimitError` - Custom error type for 429 handling
-
-**cache.go** - SQLite caching (`cache.go:16-156`)
-- `Cache.Get()` - Retrieves cached entries
-- `Cache.Put()` - Stores successful and failed lookups
-- `Cache.Stats()` - Returns cache statistics
-- Stores both found and not-found results
-
-**retry.go** - Retry and adaptive delay (`retry.go:9-97`)
-- `WithRetry()` - Executes functions with exponential backoff
-- `AdaptiveDelay` - Manages dynamic rate limiting (100ms → 200ms)
-- Handles 429 errors gracefully
-
-**utils.go** - Helper functions (`utils.go:7-41`)
-- `splitName()` - Parses registered agent name into first/last components
-- `formatAddress()` - Combines address components into formatted string
-- `columnIndex()` - Case-insensitive column lookup
-
-## API Details
-
-### Base URL
-```
-https://api.comptroller.texas.gov
-```
-
-### Endpoints Used
-
-1. **Search Franchise Tax Records**
-   - Endpoint: `/public-data/v1/public/franchise-tax-list?name={business_name}`
-   - Method: GET
-   - Returns: List of matching taxpayer IDs
-
-2. **Get Franchise Tax Details**
-   - Endpoint: `/public-data/v1/public/franchise-tax/{taxpayerID}`
-   - Method: GET
-   - Returns: Complete franchise tax record with agent and address information
-
-### Authentication
-
-All API requests require the `x-api-key` header with your Texas Comptroller API key.
+See [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) for planned improvements and implementation guides.
 
 ## Troubleshooting
 
-### Common Issues
+### "Failed to start session"
+- Ensure Chrome/Chromium is installed
+- Check that port 8080 is available
+- Try running with `--port 8081` if port conflict
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `TX_COMPTROLLER_API_KEY environment variable is not set` | API key not configured | Set the environment variable with your API key |
-| `cannot open input file` | File path is incorrect or file doesn't exist | Verify the file path and ensure the file exists |
-| `input CSV has no "Business Name" column` | Required column is missing | Add a "Business Name" column to your CSV file |
-| `search API returned HTTP 401` | Invalid or expired API key | Verify your API key is correct and active |
-| `search API returned HTTP 429` | Rate limit exceeded | Wait and retry; the app includes automatic delays |
+### "Token expired (401)"
+- Token has expired (24h max lifetime)
+- Restart the app and log in again
+- Check the keep-alive logs (should refresh every 30 min)
 
-### Debugging Tips
+### "No results" for valid names
+- Verify name spelling in Forewarn manually
+- Check that zip code is being extracted correctly
+- Try different name variations (with/without middle initial)
 
-- Run the application and observe stdout for progress messages
-- Check stderr for warnings about failed lookups
-- Verify input CSV format matches requirements (especially "Business Name" column)
-- Test with a small sample file first to ensure API key is working
+### Browser doesn't open localhost:8080
+- Check firewall settings
+- Manually navigate to http://localhost:8080
+- Check console for errors
 
-## Performance
+## Security Notes
 
-### First Run (No Cache)
-- **Rate Limit**: 100ms delay between requests = ~10 requests/second
-- **Timeout**: 30-second HTTP timeout per request
-- **Throughput**: Approximately 600 records per minute (accounting for delays)
-- **Time for 100 records**: ~10 minutes (first run)
-- **Time for 500 records**: ~50 minutes (first run, may encounter rate limits)
+- `auth-session.json` contains your Forewarn session token
+- Keep this file secure and gitignored
+- Token expires after 24 hours max
+- Browser data stored in `./browser-data/` (gitignored)
 
-### Subsequent Runs (With Cache)
-- **Cache hits**: Instant lookup (no API call)
-- **Time for 100 cached records**: < 1 second
-- **Time for 500 cached records**: < 5 seconds
+## Files to Gitignore
 
-### With Rate Limiting (429 Errors)
-If you hit rate limits during the first run:
-- Application automatically switches to adaptive mode (200ms delay)
-- Retries failed requests with exponential backoff
-- Total time may increase by 10-20% on first run
-- Subsequent runs use cache and are unaffected
-
-## Limitations
-
-- Only works with businesses registered in Texas
-- Requires exact or close match on business name for search results
-- Dependent on Texas Comptroller API availability and data accuracy
-- Network errors or API downtime will cause lookup failures
+The `.gitignore` is pre-configured for:
+```
+auth-session.json        # Session tokens
+browser-data/            # Browser profile
+data/uploads/*.csv       # Uploaded files
+data/output/*.csv        # Results
+build/                   # Local builds
+dist/                    # Distribution builds
+franchise_tax_cache.db   # API cache
+```
 
 ## License
 
-[Specify your license here]
+[Add your license here]
 
 ## Contributing
 
-[Specify contribution guidelines here]
+[Add contribution guidelines here]
 
 ## Support
 
-For issues related to:
-- **API Access**: Contact Texas Comptroller support
-- **Application Bugs**: [Specify contact or issue tracker]
-- **Feature Requests**: [Specify contact or issue tracker]
-
-## Version History
-
-- **v1.0.0** - Initial release with basic franchise tax lookup functionality
+For issues or questions:
+- Open an issue on GitHub
+- See [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) for planned features
+- Check [CLAUDE.md](CLAUDE.md) for development documentation

@@ -32,23 +32,23 @@ jobs:
 
       - name: Build for Linux (amd64)
         run: |
-          GOOS=linux GOARCH=amd64 go build -o realestate-leads-linux-amd64 main.go
+          GOOS=linux GOARCH=amd64 go build -o realestate-leads-linux-amd64 ./cmd/main.go
 
       - name: Build for Linux (arm64)
         run: |
-          GOOS=linux GOARCH=arm64 go build -o realestate-leads-linux-arm64 main.go
+          GOOS=linux GOARCH=arm64 go build -o realestate-leads-linux-arm64 ./cmd/main.go
 
       - name: Build for macOS (amd64)
         run: |
-          GOOS=darwin GOARCH=amd64 go build -o realestate-leads-macos-amd64 main.go
+          GOOS=darwin GOARCH=amd64 go build -o realestate-leads-macos-amd64 ./cmd/main.go
 
       - name: Build for macOS (arm64)
         run: |
-          GOOS=darwin GOARCH=arm64 go build -o realestate-leads-macos-arm64 main.go
+          GOOS=darwin GOARCH=arm64 go build -o realestate-leads-macos-arm64 ./cmd/main.go
 
       - name: Build for Windows (amd64)
         run: |
-          GOOS=windows GOARCH=amd64 go build -o realestate-leads-windows-amd64.exe main.go
+          GOOS=windows GOARCH=amd64 go build -o realestate-leads-windows-amd64.exe ./cmd/main.go
 
       - name: Generate checksums
         run: |
@@ -66,9 +66,20 @@ jobs:
             ## Download Instructions
 
             1. Download the binary for your platform
-            2. Set the `TX_COMPTROLLER_API_KEY` environment variable
+            2. (Optional) Set the `TX_COMPTROLLER_API_KEY` environment variable for Preview/Full modes
             3. Make it executable (Linux/macOS): `chmod +x realestate-leads-*`
-            4. Run: `./realestate-leads-<platform> --file input.csv`
+            4. Run: `./realestate-leads-<platform>`
+            5. Browser will open automatically to http://localhost:8080
+
+            ## Features
+
+            - **Web UI**: Modern browser-based interface
+            - **Three Processing Modes**:
+              - Forewarn Only (default)
+              - Preview Mode (Comptroller lookup only)
+              - Full Pipeline (Comptroller → Forewarn)
+            - **Real-time Progress**: Live updates with SSE
+            - **Multi-stage Downloads**: Access both stage 1 and stage 2 results
 
             ## Checksums
             ```

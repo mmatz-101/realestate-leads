@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>realestate-leads</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+      background: #0d1117;
+      color: #c9d1d9;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 2rem 1rem;
+    }
+    .container {
+      max-width: 640px;
+      width: 100%;
+      flex-shrink: 1;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 1rem 0.5rem; }
+      .card { padding: 1rem; }
+      h1 { font-size: 1.25rem; }
+    }
+    h1 { color: #58a6ff; margin-bottom: 0.5rem; font-size: 1.5rem; }
+    .subtitle { color: #8b949e; margin-bottom: 2rem; font-size: 0.9rem; }
+    
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 { font-size: 1rem; margin-bottom: 1rem; color: #c9d1d9; }
+    
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    .status-dot.waiting { background: #d29922; }
+    .status-dot.ready { background: #3fb950; }
+    .status-dot.error { background: #f85149; }
+    
+    button {
+      background: #238636;
+      color: #fff;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-family: inherit;
+    }
+    button:hover { background: #2ea043; }
+    button:disabled { background: #21262d; color: #484f58; cursor: not-allowed; }
+    
+    .btn-secondary {
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+    }
+    .btn-secondary:hover { background: #30363d; }
+    
+    .drop-zone {
+      border: 2px dashed #30363d;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      color: #8b949e;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: #58a6ff; color: #58a6ff; }
+    
+    select {
+      background: #0d1117;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      padding: 0.5rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      width: 100%;
+      margin-bottom: 1rem;
+    }
+    
+    .progress-bar {
+      background: #21262d;
+      border-radius: 4px;
+      height: 8px;
+      overflow: hidden;
+      margin: 1rem 0;
+    }
+    .progress-bar .fill {
+      background: #58a6ff;
+      height: 100%;
+      transition: width 0.3s;
+    }
+    
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem 1.5rem;
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+    }
+    .stats span {
+      color: #8b949e;
+      white-space: nowrap;
+    }
+    .stats .val { color: #c9d1d9; font-weight: 600; }
+    
+    .log {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 1rem;
+      color: #8b949e;
+      font-family: monospace;
+      line-height: 1.5;
+    }
+    .log-entry {
+      margin-bottom: 0.25rem;
+    }
+
+    .mode-option {
+      border: 2px solid #30363d;
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .mode-option:hover {
+      border-color: #58a6ff;
+      background: #161b22;
+    }
+    .mode-option input[type="radio"] {
+      margin-right: 0.5rem;
+    }
+    .mode-option.selected {
+      border-color: #58a6ff;
+      background: #0d1117;
+    }
+    .mode-option label {
+      cursor: pointer;
+      display: block;
+      margin: 0;
+    }
+    .mode-option strong {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #c9d1d9;
+    }
+    .mode-option p {
+      margin: 0.25rem 0;
+      font-size: 0.85rem;
+      color: #8b949e;
+    }
+    .mode-option .note {
+      font-size: 0.8rem;
+      color: #6e7681;
+      font-style: italic;
+    }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>realestate-leads</h1>
+    <p class="subtitle">Browser-automated search tool</p>
+
+    <!-- Step 1: Login -->
+    <div class="card" id="login-card">
+      <h2>
+        <span class="status-dot waiting" id="login-dot"></span>
+        Step 1: Log in to target site
+      </h2>
+      <p style="color:#8b949e; margin-bottom:1rem; font-size:0.85rem;">
+        A browser window should have opened. Log in to the target site, then click the button below.
+      </p>
+      <button id="login-btn" onclick="confirmLogin()">I've logged in</button>
+    </div>
+
+    <!-- Step 2: Upload CSV -->
+    <div class="card hidden" id="upload-card">
+      <h2>
+        <span class="status-dot waiting" id="upload-dot"></span>
+        Step 2: Upload CSV
+      </h2>
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        Drop a CSV file here or click to browse
+      </div>
+      <input type="file" id="file-input" accept=".csv" class="hidden" onchange="handleFile(this.files[0])">
+      <button class="btn-secondary hidden" id="clear-upload-btn" style="margin-top:1rem;" onclick="clearUpload()">
+        <span style="margin-right:0.25rem;">🗑️</span> Clear Upload
+      </button>
+    </div>
+
+    <!-- Step 3: Choose Processing Mode -->
+    <div class="card hidden" id="mode-card">
+      <h2>
+        <span class="status-dot waiting" id="mode-dot"></span>
+        Step 3: Choose Processing Mode
+      </h2>
+      <p style="color:#8b949e; margin-bottom:1rem; font-size:0.85rem;" id="file-info"></p>
+
+      <div class="mode-option" onclick="selectMode('forewarn')">
+        <label>
+          <input type="radio" name="mode" value="forewarn" id="mode-forewarn" checked>
+          <strong>📞 Forewarn Only - Property Enrichment</strong>
+          <p>Enrich existing names with property and phone data.</p>
+          <p class="note">Best for: CSVs that already have First Name + Last Name columns.</p>
+        </label>
+      </div>
+
+      <div class="mode-option" onclick="selectMode('preview')">
+        <label>
+          <input type="radio" name="mode" value="preview" id="mode-preview">
+          <strong>🔍 Preview Mode - Test Comptroller Lookup</strong>
+          <p>Look up LLC officers from Texas Comptroller (Stage 1 only).</p>
+          <p class="note">Best for: Testing/debugging the name lookup before full enrichment.</p>
+        </label>
+      </div>
+
+      <div class="mode-option" onclick="selectMode('full')">
+        <label>
+          <input type="radio" name="mode" value="full" id="mode-full">
+          <strong>⚡ Full Pipeline - Comptroller + Forewarn</strong>
+          <p>Complete two-stage enrichment: LLC lookup → Property/phone data.</p>
+          <p class="note">Best for: Raw MLS exports with only Business Name column.</p>
+        </label>
+      </div>
+
+      <button id="mode-confirm-btn" onclick="confirmMode()">Continue</button>
+    </div>
+
+    <!-- Step 4: Confirm & Run -->
+    <div class="card hidden" id="config-card">
+      <h2>Step 4: Start Processing</h2>
+      <p style="color:#8b949e; margin-bottom:0.75rem; font-size:0.85rem;" id="config-info"></p>
+      <p style="color:#8b949e; margin-bottom:1rem; font-size:0.85rem;" id="mode-description"></p>
+      <button id="start-btn" onclick="startJob()">Start Processing</button>
+    </div>
+
+    <!-- Step 5: Progress -->
+    <div class="card hidden" id="progress-card">
+      <h2>
+        <span class="status-dot waiting" id="progress-dot"></span>
+        Running...
+      </h2>
+      <div class="progress-bar">
+        <div class="fill" id="progress-fill" style="width: 0%"></div>
+      </div>
+      <div class="stats">
+        <span>Processed: <span class="val" id="stat-processed">0</span></span>
+        <span>Found: <span class="val" id="stat-found">0</span></span>
+        <span>Errors: <span class="val" id="stat-errors">0</span></span>
+      </div>
+      <button class="btn-secondary" id="cancel-btn" style="margin-top:1rem;" onclick="cancelJob()">Cancel Job</button>
+      <div class="log" id="log"></div>
+    </div>
+
+    <!-- Step 6: Done -->
+    <div class="card hidden" id="done-card">
+      <h2>
+        <span class="status-dot ready"></span>
+        Complete
+      </h2>
+      <div class="stats" id="final-stats"></div>
+      <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button id="download-btn" onclick="downloadResults()">Download Results CSV</button>
+        <button class="btn-secondary" id="download-stage1-btn" style="display:none;" onclick="downloadStage1()">Download Stage 1 Results</button>
+        <button class="btn-secondary" id="continue-btn" style="display:none;" onclick="continueToStage2()">Continue to Stage 2</button>
+        <button class="btn-secondary" onclick="reset()">Run Another</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let uploadedFile = null; // { fileName, path, headers }
+    let currentJobId = null;
+    let currentJobMode = null;
+    let eventSource = null;
+
+    // --- Check login status on page load ---
+    async function checkLoginStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+
+        if (data.loggedIn) {
+          document.getElementById('login-dot').className = 'status-dot ready';
+          document.getElementById('login-btn').textContent = 'Already logged in';
+          document.getElementById('login-btn').disabled = true;
+          show('upload-card');
+          console.log('Already logged in - ready to upload CSV');
+        }
+      } catch (err) {
+        console.error('Failed to check login status:', err);
+      }
+    }
+
+    // Run on page load
+    checkLoginStatus();
+
+    // --- Login ---
+    async function confirmLogin() {
+      const btn = document.getElementById('login-btn');
+      btn.disabled = true;
+      btn.textContent = 'Confirming...';
+
+      const res = await fetch('/api/login-confirm', { method: 'POST' });
+      const data = await res.json();
+
+      if (data.ok) {
+        document.getElementById('login-dot').className = 'status-dot ready';
+        btn.textContent = 'Logged in';
+        show('upload-card');
+      } else {
+        btn.disabled = false;
+        btn.textContent = "I've logged in";
+      }
+    }
+
+    // --- File Upload ---
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+
+    async function handleFile(file) {
+      if (!file) return;
+      dropZone.textContent = `Uploading ${file.name}...`;
+
+      const form = new FormData();
+      form.append('file', file);
+
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      const data = await res.json();
+
+      uploadedFile = data;
+      document.getElementById('upload-dot').className = 'status-dot ready';
+      dropZone.textContent = `✓ ${data.fileName}`;
+
+      document.getElementById('file-info').textContent = `File: ${data.fileName} (${data.headers.length} columns)`;
+      show('mode-card');
+      show('clear-upload-btn');
+    }
+
+    function clearUpload() {
+      uploadedFile = null;
+      selectedMode = 'forewarn';
+      document.getElementById('upload-dot').className = 'status-dot waiting';
+      document.getElementById('mode-dot').className = 'status-dot waiting';
+      dropZone.textContent = 'Drop a CSV file here or click to browse';
+      document.getElementById('file-input').value = '';
+      hide('mode-card');
+      hide('config-card');
+      hide('clear-upload-btn');
+    }
+
+    // --- Mode Selection ---
+    let selectedMode = 'forewarn';
+
+    function selectMode(mode) {
+      selectedMode = mode;
+      document.querySelectorAll('.mode-option').forEach(opt => opt.classList.remove('selected'));
+      document.querySelector(`.mode-option input[value="${mode}"]`).checked = true;
+      document.querySelector(`.mode-option input[value="${mode}"]`).parentElement.parentElement.classList.add('selected');
+    }
+
+    function confirmMode() {
+      document.getElementById('mode-dot').className = 'status-dot ready';
+
+      // Update config card description based on mode
+      const descriptions = {
+        forewarn: 'Will enrich with Forewarn using First Name + Last Name + Zip from each row.',
+        preview: 'Will look up LLC officers from Texas Comptroller. Results can be downloaded to verify data quality.',
+        full: 'Stage 1: LLC officer lookup from Texas Comptroller → Stage 2: Property/phone enrichment from Forewarn.'
+      };
+
+      document.getElementById('config-info').textContent = uploadedFile.fileName + ` (${uploadedFile.headers.length} columns)`;
+      document.getElementById('mode-description').textContent = descriptions[selectedMode];
+
+      show('config-card');
+    }
+
+    // --- Start Job ---
+    async function startJob() {
+      const btn = document.getElementById('start-btn');
+      btn.disabled = true;
+      btn.textContent = 'Starting...';
+
+      try {
+        const res = await fetch('/api/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filePath: uploadedFile.path,
+            mode: selectedMode,
+          }),
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server error: ${res.status} - ${text}`);
+        }
+
+        const data = await res.json();
+        currentJobId = data.jobId;
+        currentJobMode = data.mode;
+
+        show('progress-card');
+        listenForProgress();
+      } catch (err) {
+        console.error('Failed to start job:', err);
+        alert('Failed to start job: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Start Processing';
+      }
+    }
+
+    // --- Cancel Job ---
+    async function cancelJob() {
+      const btn = document.getElementById('cancel-btn');
+      if (!confirm('Are you sure you want to cancel this job? Partial results will be saved.')) {
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Cancelling...';
+
+      try {
+        await fetch(`/api/job/${currentJobId}/cancel`, { method: 'POST' });
+        appendLog('Job cancelled by user');
+      } catch (err) {
+        console.error('Failed to cancel job:', err);
+        btn.disabled = false;
+        btn.textContent = 'Cancel Job';
+      }
+    }
+
+    // --- SSE Progress ---
+    function listenForProgress() {
+      console.log('[SSE] Connecting to /api/events for job:', currentJobId);
+      eventSource = new EventSource('/api/events');
+
+      eventSource.onerror = (err) => {
+        console.error('[SSE] Connection error:', err);
+      };
+
+      eventSource.onopen = () => {
+        console.log('[SSE] Connection opened');
+      };
+
+      eventSource.onmessage = (e) => {
+        const p = JSON.parse(e.data);
+        console.log('[SSE] Received:', p);
+        if (p.id !== currentJobId) {
+          console.log('[SSE] Ignoring event for different job:', p.id, 'current:', currentJobId);
+          return;
+        }
+
+        document.getElementById('progress-fill').style.width = p.percent.toFixed(1) + '%';
+        document.getElementById('stat-processed').textContent = `${p.processed}/${p.total}`;
+        document.getElementById('stat-found').textContent = p.found;
+        document.getElementById('stat-errors').textContent = p.errors;
+
+        // Update heading with stage info for multi-stage jobs
+        if (p.totalStages > 1) {
+          document.querySelector('#progress-card h2').innerHTML = `
+            <span class="status-dot running"></span>
+            Stage ${p.currentStage}/${p.totalStages}: ${p.stageName}
+          `;
+        }
+
+        // Add stage prefix to log message
+        const stagePrefix = p.totalStages > 1 ? `[Stage ${p.currentStage}/${p.totalStages}] ` : '';
+        appendLog(`${stagePrefix}Row ${p.processed}/${p.total} — found: ${p.found}, errors: ${p.errors}`);
+
+        if (p.status === 'complete' || p.status === 'failed' || p.status === 'cancelled') {
+          console.log('[SSE] Job finished with status:', p.status);
+          eventSource.close();
+          document.getElementById('cancel-btn').style.display = 'none';
+
+          let statusClass = 'status-dot ready';
+          let statusText = 'Complete';
+          if (p.status === 'failed') {
+            statusClass = 'status-dot error';
+            statusText = 'Failed';
+          } else if (p.status === 'cancelled') {
+            statusClass = 'status-dot error';
+            statusText = 'Cancelled (Partial Results)';
+          }
+
+          // Update the progress card heading
+          document.querySelector('#progress-card h2').innerHTML = `
+            <span class="${statusClass}"></span>
+            ${statusText}
+          `;
+
+          document.getElementById('final-stats').innerHTML = `
+            <span>Total: <span class="val">${p.total}</span></span>
+            <span>Processed: <span class="val">${p.processed}</span></span>
+            <span>Found: <span class="val">${p.found}</span></span>
+            <span>Errors: <span class="val">${p.errors}</span></span>
+          `;
+
+          // Update download button text based on mode
+          const downloadBtn = document.getElementById('download-btn');
+          const downloadStage1Btn = document.getElementById('download-stage1-btn');
+
+          if (p.mode === 'preview') {
+            downloadBtn.textContent = 'Download Stage 1 Results (Comptroller)';
+            downloadStage1Btn.style.display = 'none';
+          } else if (p.mode === 'full') {
+            downloadBtn.textContent = 'Download Stage 2 Results (Forewarn)';
+            downloadStage1Btn.style.display = 'inline-block';
+            downloadStage1Btn.textContent = 'Download Stage 1 Results (Comptroller)';
+          } else {
+            downloadBtn.textContent = 'Download Results CSV';
+            downloadStage1Btn.style.display = 'none';
+          }
+
+          // Show "Continue to Stage 2" button only for completed preview mode jobs
+          const continueBtn = document.getElementById('continue-btn');
+          if (p.status === 'complete' && p.mode === 'preview') {
+            continueBtn.style.display = 'inline-block';
+          } else {
+            continueBtn.style.display = 'none';
+          }
+
+          show('done-card');
+        }
+      };
+    }
+
+    // --- Download ---
+    function downloadResults() {
+      window.location.href = `/api/job/${currentJobId}/download`;
+    }
+
+    function downloadStage1() {
+      window.location.href = `/api/job/${currentJobId}/download?stage=1`;
+    }
+
+    // --- Continue to Stage 2 ---
+    async function continueToStage2() {
+      try {
+        const res = await fetch(`/api/job/${currentJobId}/continue`, {
+          method: 'POST',
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          alert(`Failed to continue: ${text}`);
+          return;
+        }
+
+        const data = await res.json();
+
+        // Start a new job with the stage 2 results
+        currentJobId = data.jobId;
+        currentJobMode = data.mode;
+
+        // Reset UI for new job
+        document.getElementById('progress-fill').style.width = '0%';
+        document.getElementById('log').innerHTML = '';
+        document.getElementById('stat-processed').textContent = `0/${data.total}`;
+        document.getElementById('stat-found').textContent = '0';
+        document.getElementById('stat-errors').textContent = '0';
+        document.getElementById('cancel-btn').style.display = '';
+        document.getElementById('cancel-btn').disabled = false;
+        document.getElementById('cancel-btn').textContent = 'Cancel Job';
+
+        // Show progress card
+        hide('done-card');
+        show('progress-card');
+
+        appendLog(`Starting Stage 2: Forewarn enrichment on ${data.total} rows`);
+
+        // Start listening for progress
+        listenForProgress();
+      } catch (err) {
+        console.error('Continue to stage 2 error:', err);
+        alert('Failed to continue to stage 2');
+      }
+    }
+
+    // --- Reset ---
+    function reset() {
+      uploadedFile = null;
+      currentJobId = null;
+      document.getElementById('upload-dot').className = 'status-dot waiting';
+      document.getElementById('progress-fill').style.width = '0%';
+      document.getElementById('log').innerHTML = '';
+      dropZone.textContent = 'Drop a CSV file here or click to browse';
+      document.getElementById('start-btn').disabled = false;
+      document.getElementById('cancel-btn').style.display = '';
+      document.getElementById('cancel-btn').disabled = false;
+      document.getElementById('cancel-btn').textContent = 'Cancel Job';
+      hide('config-card');
+      hide('progress-card');
+      hide('done-card');
+      show('upload-card');
+    }
+
+    // --- Helpers ---
+    function show(id) { document.getElementById(id).classList.remove('hidden'); }
+    function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function appendLog(msg) {
+      const log = document.getElementById('log');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.textContent = msg;
+      log.appendChild(entry);
+
+      // Auto-scroll to bottom to show latest entry
+      log.scrollTop = log.scrollHeight;
+    }
+  </script>
+</body>
+</html>

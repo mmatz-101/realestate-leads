@@ -1,4 +1,4 @@
-package api
+package comptroller
 
 import (
 	"encoding/json"
@@ -8,8 +8,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/mmatz-101/realestate-leads/internal/retry"
 )
 
 const (
@@ -27,6 +25,7 @@ type searchResponse struct {
 	} `json:"data"`
 }
 
+// DetailResponse holds business details from the Texas Comptroller API.
 type DetailResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
@@ -39,13 +38,13 @@ type DetailResponse struct {
 	} `json:"data"`
 }
 
-// Client handles communication with the Texas Comptroller API
+// Client handles communication with the Texas Comptroller API.
 type Client struct {
 	apiKey     string
 	httpClient *http.Client
 }
 
-// NewClient creates a new API client
+// NewClient creates a new API client.
 func NewClient(apiKey string) *Client {
 	return &Client{
 		apiKey:     apiKey,
@@ -53,7 +52,7 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
-// apiGet performs a GET request to the API
+// apiGet performs a GET request to the API.
 func (c *Client) apiGet(endpoint string) ([]byte, int, error) {
 	req, err := http.NewRequest(http.MethodGet, baseURL+endpoint, nil)
 	if err != nil {
@@ -74,7 +73,7 @@ func (c *Client) apiGet(endpoint string) ([]byte, int, error) {
 	return body, resp.StatusCode, nil
 }
 
-// SearchFranchiseTax searches for a business by name
+// SearchFranchiseTax searches for a business by name and returns the taxpayer ID.
 func (c *Client) SearchFranchiseTax(name string) (string, error) {
 	endpoint := "/public-data/v1/public/franchise-tax-list?name=" + url.QueryEscape(name)
 	body, status, err := c.apiGet(endpoint)
@@ -82,7 +81,7 @@ func (c *Client) SearchFranchiseTax(name string) (string, error) {
 		return "", err
 	}
 	if status == http.StatusTooManyRequests {
-		return "", &retry.RateLimitError{RetryAfter: 5 * time.Second}
+		return "", fmt.Errorf("rate limited (429)")
 	}
 	if status != http.StatusOK {
 		snippet := body
@@ -100,7 +99,6 @@ func (c *Client) SearchFranchiseTax(name string) (string, error) {
 		// Try again without business suffix (LLC, Inc, Corp, etc.)
 		stripped := stripBusinessSuffix(name)
 		if stripped != "" {
-			fmt.Printf("  retrying without suffix: %q\n", stripped)
 			return c.SearchFranchiseTax(stripped)
 		}
 		return "", nil
@@ -108,7 +106,7 @@ func (c *Client) SearchFranchiseTax(name string) (string, error) {
 	return result.Data[0].TaxpayerID, nil
 }
 
-// GetFranchiseTaxDetail retrieves detailed information for a taxpayer ID
+// GetFranchiseTaxDetail retrieves detailed information for a taxpayer ID.
 func (c *Client) GetFranchiseTaxDetail(taxpayerID string) (*DetailResponse, error) {
 	endpoint := "/public-data/v1/public/franchise-tax/" + url.PathEscape(taxpayerID)
 	body, status, err := c.apiGet(endpoint)
@@ -116,7 +114,7 @@ func (c *Client) GetFranchiseTaxDetail(taxpayerID string) (*DetailResponse, erro
 		return nil, err
 	}
 	if status == http.StatusTooManyRequests {
-		return nil, &retry.RateLimitError{RetryAfter: 5 * time.Second}
+		return nil, fmt.Errorf("rate limited (429)")
 	}
 	if status != http.StatusOK {
 		snippet := body
@@ -133,7 +131,7 @@ func (c *Client) GetFranchiseTaxDetail(taxpayerID string) (*DetailResponse, erro
 	return &result, nil
 }
 
-// stripBusinessSuffix removes common business suffixes for retry logic
+// stripBusinessSuffix removes common business suffixes for retry logic.
 func stripBusinessSuffix(name string) string {
 	suffixes := []string{
 		" LLC", " L.L.C.", " L.L.C",
@@ -141,7 +139,7 @@ func stripBusinessSuffix(name string) string {
 		" Corp.", " Corp", " Corporation",
 		" Co.", " Co", " Company",
 		" Ltd.", " Ltd", " Limited",
-		"L.P.", "LP",
+		" L.P.", " LP",
 	}
 	nameUpper := strings.ToUpper(name)
 
@@ -152,4 +150,39 @@ func stripBusinessSuffix(name string) string {
 		}
 	}
 	return ""
+}
+
+// SplitName splits "John Doe" into ("John", "Doe").
+// Handles edge cases like single names or empty strings.
+func SplitName(fullName string) (string, string) {
+	fullName = strings.TrimSpace(fullName)
+	if fullName == "" {
+		return "", ""
+	}
+	parts := strings.Fields(fullName)
+	if len(parts) == 0 {
+		return "", ""
+	}
+	if len(parts) == 1 {
+		return parts[0], ""
+	}
+	return parts[0], parts[len(parts)-1]
+}
+
+// FormatAddress combines address components into a single string.
+func FormatAddress(street, city, state, zip string) string {
+	parts := []string{}
+	if street != "" {
+		parts = append(parts, street)
+	}
+	if city != "" {
+		parts = append(parts, city)
+	}
+	if state != "" {
+		parts = append(parts, state)
+	}
+	if zip != "" {
+		parts = append(parts, zip)
+	}
+	return strings.Join(parts, ", ")
 }
